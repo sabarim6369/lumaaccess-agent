@@ -7,11 +7,10 @@ const screenshot = require('screenshot-desktop');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
-const https = require('https'); // for secure POST
+const https = require('https'); 
 const http = require('http');
 const deviceIdFile = path.join(app.getPath('userData'), 'device-id.txt');
 
-// 🟡 Read or create persistent deviceId
 function getOrCreateDeviceId() {
   if (fs.existsSync(deviceIdFile)) {
     return fs.readFileSync(deviceIdFile, 'utf8');
@@ -22,7 +21,6 @@ function getOrCreateDeviceId() {
   }
 }
 
-// 🟡 Read userId from config written by .bat
 function getUserIdFromConfig() {
   const configPath = path.join(os.homedir(), '.lumaagent', 'config.json');
   try {
@@ -39,6 +37,7 @@ function sendPairingToBackend(userId, deviceId, deviceName, os, hostname) {
   const data = JSON.stringify({ userId, deviceId, deviceName, os, hostname });
 
   const req = http.request({
+    // hostname: 'lumaaccess-server.onrender.com',
     hostname: 'localhost',
     port: 8081,
     path: '/api/device/add-ownership',
@@ -96,6 +95,33 @@ function createTray() {
   tray.setToolTip('Device Agent');
   tray.setContextMenu(contextMenu);
 }
+let screenStreamInterval = null;
+
+function startScreenStreaming() { 
+   const deviceId = getOrCreateDeviceId();
+  console.log('🤣🤣🤣🤣🤣🤣Starting screen streaming...');
+  if (screenStreamInterval) {
+    clearInterval(screenStreamInterval);
+    screenStreamInterval = null;
+  }
+
+  screenStreamInterval = setInterval(() => {
+    screenshot({ format: 'png' })
+      .then((imgBuffer) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'screen-stream',
+            image: imgBuffer.toString('base64'),
+            timestamp: Date.now(),
+           deviceId1:deviceId
+          }));
+        }
+      })
+      .catch((err) => {
+        console.error('Screen streaming error:', err);
+      });
+  }, 1000); 
+}
 
 function connectWebSocket() {
   const userId = getUserIdFromConfig();
@@ -130,13 +156,13 @@ function connectWebSocket() {
       status: 'online',
       lastSeen: new Date().toISOString(),
     }));
-
+startScreenStreaming()
     setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
         console.log('Ping sent to server');
       }
-    }, 240000); // 4 minutes
+    }, 240000); 
   });
 
   ws.on('message', (message) => {
@@ -203,6 +229,7 @@ function connectWebSocket() {
 
   case 'Screen Share':
     new Notification({ title: 'Screen Share', body: 'Screen sharing not implemented yet' }).show();
+    startScreenStreaming(); 
     break;
 
   case 'Download Files':
@@ -273,6 +300,9 @@ app.whenReady().then(() => {
   autoLauncher.enable();
   connectWebSocket();
   startLocalHttpServer();
+//  setTimeout(() => {
+//     startScreenStreaming();  // <-- add this line
+//   }, 1000); // Delay a bit to allow ws to connect
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
