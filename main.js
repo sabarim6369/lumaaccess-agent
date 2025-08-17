@@ -36,10 +36,10 @@ function getUserIdFromConfig() {
 function sendPairingToBackend(userId, deviceId, deviceName, os, hostname) {
   const data = JSON.stringify({ userId, deviceId, deviceName, os, hostname });
 
-  const req = http.request({
-    // hostname: 'lumaaccess-server.onrender.com',
-    hostname: 'localhost',
-    port: 8081,
+  const req = https.request({
+    hostname: 'lumaaccess-server.onrender.com',
+    // hostname: 'localhost',
+    // port: 8081,
     path: '/api/device/add-ownership',
     method: 'POST',
     headers: {
@@ -122,13 +122,104 @@ function startScreenStreaming() {
       });
   }, 1000); 
 }
+// let cameraStream = null;
+// let cameraStreamInterval = null;
 
+// function startCameraStreaming() {
+//   const deviceId = getOrCreateDeviceId();
+//   console.log('🎥🎥🎥 Starting camera streaming...');
+
+//   // Stop any existing camera stream
+//   if (cameraStreamInterval) {
+//     clearInterval(cameraStreamInterval);
+//     cameraStreamInterval = null;
+//   }
+
+//   navigator.mediaDevices.getUserMedia({ video: true })
+//     .then((stream) => {
+//       cameraStream = stream;
+
+//       const video = document.createElement('video');
+//       video.srcObject = stream;
+//       video.play();
+
+//       const canvas = document.createElement('canvas');
+//       const context = canvas.getContext('2d');
+
+//       cameraStreamInterval = setInterval(() => {
+//         if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+//         canvas.width = video.videoWidth;
+//         canvas.height = video.videoHeight;
+
+//         context.drawImage(video, 0, 0, canvas.width, canvas.height);
+//         const imageBase64 = canvas.toDataURL('image/jpeg'); // base64
+
+//         if (ws && ws.readyState === WebSocket.OPEN) {
+//           ws.send(JSON.stringify({
+//             type: 'camera-stream',
+//             image: imageBase64,
+//             timestamp: Date.now(),
+//             deviceId2: deviceId,
+//           }));
+//         }
+//       }, 1000); // 1 frame per second
+//     })
+//     .catch((err) => {
+//       console.error('Camera streaming error:', err);
+//     });
+// }
+
+let cameraStream = null;
+let cameraStreamInterval = null;
+
+function startCameraStreaming() {
+  console.log('Starting camera streaming...');
+  const video = document.getElementById('video');
+
+  if (!video) {
+    console.error('Video element not found!');
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then((stream) => {
+      cameraStream = stream;
+      video.srcObject = stream;
+      video.play();
+
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
+      cameraStreamInterval = setInterval(() => {
+        if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageBase64 = canvas.toDataURL('image/jpeg');
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'camera-stream',
+            cameraimage: imageBase64,
+            timestamp: Date.now(),
+            deviceId2: getOrCreateDeviceId(),
+          }));
+        }
+      }, 1000);
+    })
+    .catch((err) => {
+      console.error('Camera streaming error:', err);
+    });
+}
 function connectWebSocket() {
   const userId = getUserIdFromConfig();
   const deviceId = getOrCreateDeviceId();
 
-  // ws = new WebSocket('wss://lumaaccess-server.onrender.com');
-  ws = new WebSocket('ws://localhost:8081');
+  ws = new WebSocket('wss://lumaaccess-server.onrender.com');
+  // ws = new WebSocket('ws://localhost:8081');
 
   ws.on('open', () => {
     console.log('Connected to backend');
@@ -157,6 +248,8 @@ function connectWebSocket() {
       lastSeen: new Date().toISOString(),
     }));
 startScreenStreaming()
+
+// startCameraStreaming()
     setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
